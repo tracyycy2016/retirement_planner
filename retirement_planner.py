@@ -808,7 +808,7 @@ def main():
             st.markdown("### 🧑 Profile")
             current_age = st.number_input("Current Age", 25, 60, 35, 1, key="current_age")
             lifespan    = st.number_input("Planning Horizon (age)", 80, 100, 90, 1, key="lifespan")
-            years_in_canada = st.number_input("Years in Canada (for OAS proration)", 10, 40, 35, 1, key="yic")
+            years_in_canada = st.number_input("Years in Canada (for OAS proration)", 0, 40, 35, 1, key="yic")
 
             st.markdown("### 🎯 Retirement Target")
             retire_age     = st.number_input("Target Retirement Age", current_age + 1, 70, 55, 1, key="retire_age")
