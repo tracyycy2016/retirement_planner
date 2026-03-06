@@ -817,18 +817,16 @@ def sustainability_score(df: pd.DataFrame) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
-    # ── Header ────────────────────────────────────────────────────────────────
     st.markdown("""
     <div style='background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
          padding: 2rem; border-radius: 12px; margin-bottom: 1.5rem;'>
         <h1 style='color: #e94560; margin:0; font-size:2.2rem;'>🍁 Canadian Retirement Planner</h1>
         <p style='color: #a8b2d8; margin-top:0.5rem; font-size:1.05rem;'>
-            Multi-destination early retirement analysis · RRSP · TFSA · Non-Reg · Tax-optimized
+            Multi-destination early retirement analysis · RRSP · TFSA · Non-Reg · Pension · Tax-optimized
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Top-level page tabs ───────────────────────────────────────────────────
     page_tabs = st.tabs([
         "⚙️ My Profile & Settings",
         "🏠 Living Expenses",
@@ -839,63 +837,113 @@ def main():
         "📊 Data Tables",
     ])
 
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     # TAB 0 — PROFILE & SETTINGS
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     with page_tabs[0]:
         st.markdown("## 👤 Personal Profile & Financial Settings")
-        st.caption("Set your personal details, account balances, and retirement preferences here.")
 
         col_a, col_b, col_c = st.columns(3)
 
         with col_a:
             st.markdown("### 🧑 Profile")
-            current_age = st.number_input("Current Age", 25, 60, 35, 1, key="current_age")
-            lifespan    = st.number_input("Planning Horizon (age)", 80, 100, 90, 1, key="lifespan")
+            current_age     = st.number_input("Current Age", 25, 60, 35, 1, key="current_age")
+            lifespan        = st.number_input("Planning Horizon (age)", 80, 100, 90, 1, key="lifespan")
             years_in_canada = st.number_input("Years in Canada (for OAS proration)", 0, 40, 35, 1, key="yic")
-
             st.markdown("### 🎯 Retirement Target")
-            retire_age     = st.number_input("Target Retirement Age", current_age + 1, 70, 55, 1, key="retire_age")
-            tfsa_priority  = st.slider("TFSA draw priority (fraction of income gap)", 0.1, 1.0, 0.5, 0.05, key="tfsa_pri")
+            retire_age    = st.number_input("Target Retirement Age", current_age + 1, 70, 55, 1, key="retire_age")
+            tfsa_priority = st.slider("TFSA draw priority (fraction of income gap)", 0.1, 1.0, 0.5, 0.05, key="tfsa_pri")
 
         with col_b:
             st.markdown("### 💰 Income & Salary")
             current_salary = st.number_input("Current Annual Salary (CAD)", 40000, 500000, 120000, 5000, key="salary")
             salary_growth  = st.slider("Annual Salary Growth", 0.0, 0.10, 0.02, 0.005, format="%.1f%%", key="sal_growth")
-
             st.markdown("### 📊 CPP Estimate")
-            cpp_avg_income       = st.number_input("Avg Career Income for CPP (CAD)", 40000, 200000, 95000, 5000, key="cpp_inc")
-            cpp_contributory_years = st.number_input("CPP Contributory Years (career total)", 5, 39, 30, 1, key="cpp_yrs")
+            cpp_avg_income         = st.number_input("Avg Career Income for CPP (CAD)", 40000, 200000, 95000, 5000, key="cpp_inc")
+            cpp_contributory_years = st.number_input("CPP Contributory Years", 5, 39, 30, 1, key="cpp_yrs")
             cpp_start = st.selectbox("CPP Start Age", [60,61,62,63,64,65,66,67,68,69,70], index=5, key="cpp_start")
             oas_start = st.selectbox("OAS Start Age", [65,66,67,68,69,70], index=0, key="oas_start")
 
         with col_c:
             st.markdown("### 🏦 Account Balances (CAD today)")
-            rrsp_balance   = st.number_input("RRSP Balance",              0, 2000000, 80000,  5000, key="rrsp_bal")
-            tfsa_balance   = st.number_input("TFSA Balance",              0,  500000, 40000,  5000, key="tfsa_bal")
-            nonreg_balance = st.number_input("Non-Registered Balance",    0, 2000000, 20000,  5000, key="nr_bal")
-
+            rrsp_balance   = st.number_input("RRSP Balance",           0, 2000000,  80000, 5000, key="rrsp_bal")
+            tfsa_balance   = st.number_input("TFSA Balance",           0,  500000,  40000, 5000, key="tfsa_bal")
+            nonreg_balance = st.number_input("Non-Registered Balance", 0, 2000000,  20000, 5000, key="nr_bal")
             st.markdown("### 💳 Annual Contributions (CAD)")
-            annual_rrsp   = st.number_input("Annual RRSP Contribution",   0,  31560, 18000,   500, key="rrsp_con")
-            annual_tfsa   = st.number_input("Annual TFSA Contribution",   0,   7000,  7000,   500, key="tfsa_con")
-            annual_nonreg = st.number_input("Annual Non-Reg Contribution",0, 200000, 10000,  1000, key="nr_con")
+            annual_rrsp   = st.number_input("Annual RRSP Contribution",    0,  31560, 18000,  500, key="rrsp_con")
+            annual_tfsa   = st.number_input("Annual TFSA Contribution",    0,   7000,  7000,  500, key="tfsa_con")
+            annual_nonreg = st.number_input("Annual Non-Reg Contribution", 0, 200000, 10000, 1000, key="nr_con")
 
+        # ── Group Pension Plan ──────────────────────────────────────────
         st.divider()
-        st.markdown("### 🔧 Rate Overrides  *(optional — leave unchecked to use destination defaults)*")
-        oc1, oc2 = st.columns(2)
-        with oc1:
-            use_inv_override = st.checkbox("Override Investment Return", key="use_inv")
-            inv_override = st.slider("Investment Return", 0.01, 0.12, 0.065, 0.005,
-                                     format="%.1f%%", key="inv_ov") if use_inv_override else None
-        with oc2:
-            use_inf_override = st.checkbox("Override Inflation Rate", key="use_inf")
-            inf_override = st.slider("Inflation Rate", 0.005, 0.08, 0.025, 0.005,
-                                     format="%.1f%%", key="inf_ov") if use_inf_override else None
+        st.markdown("### 🏢 Company Group Pension Plan")
+        pension_type_radio = st.radio(
+            "Pension type", ["None", "Defined Benefit (DB)", "Defined Contribution (DC)"],
+            horizontal=True, key="pension_type_radio"
+        )
+        if pension_type_radio == "Defined Benefit (DB)":
+            pc1, pc2, pc3 = st.columns(3)
+            with pc1:
+                db_annual_benefit = st.number_input(
+                    "Annual DB benefit at retirement (CAD today)", 0, 200000, 20000, 1000, key="db_benefit",
+                    help="Gross annual pension your employer promises, in today's dollars.")
+            with pc2:
+                db_indexed = st.checkbox("CPI-indexed?", value=True, key="db_indexed",
+                    help="If checked, benefit grows 2%/yr. Most public-sector pensions are indexed.")
+            with pc3:
+                st.metric("Monthly Equivalent", f"${st.session_state.get('db_benefit', 20000)/12:,.0f}")
+            st.caption("⚠️ DB pension treated as registered pension income — NR withholding applies abroad.")
+        elif pension_type_radio == "Defined Contribution (DC)":
+            dc1, dc2 = st.columns(2)
+            with dc1:
+                dc_pension_balance = st.number_input(
+                    "Current DC Pension Balance (CAD)", 0, 2000000, 50000, 5000, key="dc_bal",
+                    help="Current balance in your group DC / DPSP / PRPP account.")
+            with dc2:
+                annual_dc_contribution = st.number_input(
+                    "Annual Total DC Contribution (you + employer, CAD)", 0, 50000, 10000, 500, key="dc_con",
+                    help="Include both your contribution and employer match.")
+            st.caption("DC pension grows like RRSP and is drawn after TFSA, before RRSP/RRIF at retirement.")
 
+        # ── Per-Account Investment Returns ──────────────────────────────
+        st.divider()
+        st.markdown("### 📈 Investment Returns by Account Type")
+        st.caption("Set expected annual return for each account independently. Defaults reflect a balanced portfolio.")
+        ra1, ra2, ra3, ra4 = st.columns(4)
+        with ra1:
+            inv_rrsp   = st.slider("RRSP / RRIF",      0.01, 0.15, 0.065, 0.005, format="%.1f%%", key="inv_rrsp")
+        with ra2:
+            inv_tfsa   = st.slider("TFSA",              0.01, 0.15, 0.070, 0.005, format="%.1f%%", key="inv_tfsa")
+        with ra3:
+            inv_nonreg = st.slider("Non-Registered",    0.01, 0.15, 0.055, 0.005, format="%.1f%%", key="inv_nonreg")
+        with ra4:
+            dc_disabled = (pension_type_radio != "Defined Contribution (DC)")
+            inv_dc     = st.slider("DC Pension",        0.01, 0.15, 0.065, 0.005, format="%.1f%%", key="inv_dc",
+                                   disabled=dc_disabled)
+
+        # ── Per-Destination Inflation ───────────────────────────────────
+        st.divider()
+        st.markdown("### 🌍 Inflation Rate by Destination")
+        st.caption("Each destination has its own historical default. Adjust individually as needed.")
+        _dests_preview = st.session_state.get("sel_dests",
+                            ["Toronto, Canada", "Lisbon/Algarve, Portugal", "Athens/Crete, Greece"])
+        inf_cols = st.columns(min(len(_dests_preview), 4))
+        dest_inflation_overrides = {}
+        for i, d in enumerate(_dests_preview):
+            with inf_cols[i % 4]:
+                val = st.slider(
+                    f"{DESTINATIONS[d]['flag']} {d.split(',')[0]}",
+                    0.005, 0.10, float(DESTINATIONS[d]["inflation"]), 0.005,
+                    format="%.1f%%", key=f"inf_dest_{d}"
+                )
+                dest_inflation_overrides[d] = val
+        st.session_state["dest_inflation_overrides"] = dest_inflation_overrides
+
+        # ── Destination Selector ────────────────────────────────────────
         st.divider()
         st.markdown("### 🗺️ Retirement Destinations to Compare")
         selected_dests = st.multiselect(
-            "Select up to 8 destinations",
+            "Select destinations to compare (up to 8)",
             list(DESTINATIONS.keys()),
             default=["Toronto, Canada", "Lisbon/Algarve, Portugal", "Athens/Crete, Greece"],
             key="sel_dests"
@@ -903,32 +951,36 @@ def main():
         if not selected_dests:
             st.warning("Please select at least one destination.")
 
-        # Estimated CPP / OAS preview
-        if current_age and retire_age:
-            st.divider()
-            st.markdown("### 📐 Estimated Government Benefits Preview")
-            bc1, bc2, bc3 = st.columns(3)
-            est_cpp = get_cpp_annual(cpp_start, cpp_avg_income, cpp_contributory_years)
-            est_oas = get_oas_annual(oas_start, oas_start, years_in_canada)
-            with bc1:
-                st.metric("Estimated CPP (at 65 base)", f"${est_cpp:,.0f}/yr",
-                          help="Adjusted for start age selected above")
-            with bc2:
-                st.metric("Estimated OAS (at 65 base)", f"${est_oas:,.0f}/yr",
-                          help="Pro-rated by years in Canada")
-            with bc3:
-                st.metric("Combined Annual", f"${est_cpp + est_oas:,.0f}/yr",
-                          f"${(est_cpp + est_oas)/12:,.0f}/mo")
+        # ── Government Benefits Preview ─────────────────────────────────
+        st.divider()
+        st.markdown("### 📐 Estimated Government Benefits Preview")
+        est_cpp = get_cpp_annual(
+            st.session_state.get("cpp_start", 65),
+            st.session_state.get("cpp_inc", 95000),
+            st.session_state.get("cpp_yrs", 30)
+        )
+        est_oas = get_oas_annual(
+            st.session_state.get("oas_start", 65),
+            st.session_state.get("oas_start", 65),
+            st.session_state.get("yic", 35)
+        )
+        _ptype = st.session_state.get("pension_type_radio", "None")
+        _db_val = st.session_state.get("db_benefit", 0) if _ptype == "Defined Benefit (DB)" else 0
+        pv1, pv2, pv3, pv4 = st.columns(4)
+        pv1.metric("Estimated CPP/yr", f"${est_cpp:,.0f}")
+        pv2.metric("Estimated OAS/yr", f"${est_oas:,.0f}")
+        pv3.metric("DB Pension/yr", f"${_db_val:,.0f}" if _db_val else "N/A")
+        pv4.metric("Total Guaranteed/yr", f"${est_cpp + est_oas + _db_val:,.0f}",
+                   f"${(est_cpp + est_oas + _db_val)/12:,.0f}/mo")
 
-    # Retrieve all widget values (stored in session_state by key)
-    # Provide safe defaults so other tabs work even before tab 0 is visited
+    # ── Read all values from session state (safe defaults for other tabs) ──
     current_age    = st.session_state.get("current_age",    35)
     lifespan       = st.session_state.get("lifespan",       90)
     years_in_canada= st.session_state.get("yic",            35)
     retire_age     = st.session_state.get("retire_age",     55)
-    tfsa_priority  = st.session_state.get("tfsa_pri",      0.5)
+    tfsa_priority  = st.session_state.get("tfsa_pri",       0.5)
     current_salary = st.session_state.get("salary",     120000)
-    salary_growth  = st.session_state.get("sal_growth",  0.02)
+    salary_growth  = st.session_state.get("sal_growth",   0.02)
     cpp_avg_income = st.session_state.get("cpp_inc",     95000)
     cpp_contributory_years = st.session_state.get("cpp_yrs", 30)
     cpp_start      = st.session_state.get("cpp_start",      65)
@@ -939,142 +991,113 @@ def main():
     annual_rrsp    = st.session_state.get("rrsp_con",    18000)
     annual_tfsa    = st.session_state.get("tfsa_con",     7000)
     annual_nonreg  = st.session_state.get("nr_con",      10000)
-    inv_rrsp       = st.session_state.get("inv_rrsp",   0.065)
-    inv_tfsa       = st.session_state.get("inv_tfsa",   0.07)
-    inv_nonreg     = st.session_state.get("inv_nonreg", 0.055)
-    inv_dc         = st.session_state.get("inv_dc",     0.065)
-    _pension_radio     = st.session_state.get("pension_type_radio", "None")
-    pension_type_key   = {"None": "none", "Defined Benefit (DB)": "db",
-                          "Defined Contribution (DC)": "dc"}.get(_pension_radio, "none")
-    db_annual_benefit  = st.session_state.get("db_benefit",  0.0)
-    db_indexed         = st.session_state.get("db_indexed",  True)
-    dc_pension_balance = st.session_state.get("dc_bal",      0.0)
-    annual_dc_contribution = st.session_state.get("dc_con",  0.0)
+    inv_rrsp       = st.session_state.get("inv_rrsp",    0.065)
+    inv_tfsa       = st.session_state.get("inv_tfsa",    0.070)
+    inv_nonreg     = st.session_state.get("inv_nonreg",  0.055)
+    inv_dc         = st.session_state.get("inv_dc",      0.065)
+    _pension_radio      = st.session_state.get("pension_type_radio", "None")
+    pension_type_key    = {"None": "none", "Defined Benefit (DB)": "db",
+                           "Defined Contribution (DC)": "dc"}.get(_pension_radio, "none")
+    db_annual_benefit   = st.session_state.get("db_benefit",  0.0) if pension_type_key == "db" else 0.0
+    db_indexed          = st.session_state.get("db_indexed",  True)
+    dc_pension_balance  = st.session_state.get("dc_bal",      0.0) if pension_type_key == "dc" else 0.0
+    annual_dc_contribution = st.session_state.get("dc_con",   0.0) if pension_type_key == "dc" else 0.0
     dest_inflation_overrides = st.session_state.get("dest_inflation_overrides", {})
-    selected_dests = st.session_state.get("sel_dests",
-                        ["Toronto, Canada", "Lisbon/Algarve, Portugal", "Athens/Crete, Greece"])
+    selected_dests  = st.session_state.get("sel_dests",
+                          ["Toronto, Canada", "Lisbon/Algarve, Portugal", "Athens/Crete, Greece"])
 
     if not selected_dests:
-        for t in page_tabs[1:]:
-            pass  # tabs exist but content below will be skipped
         st.stop()
 
     base_params = {
-        "current_age": current_age,
-        "lifespan": lifespan,
-        "years_in_canada": years_in_canada,
-        "current_salary": current_salary,
-        "salary_growth": salary_growth,
-        "rrsp_balance": rrsp_balance,
-        "tfsa_balance": tfsa_balance,
-        "nonreg_balance": nonreg_balance,
-        "annual_rrsp_contribution": annual_rrsp,
-        "annual_tfsa_contribution": annual_tfsa,
+        "current_age": current_age, "lifespan": lifespan,
+        "years_in_canada": years_in_canada, "current_salary": current_salary,
+        "salary_growth": salary_growth, "rrsp_balance": rrsp_balance,
+        "tfsa_balance": tfsa_balance, "nonreg_balance": nonreg_balance,
+        "annual_rrsp_contribution": annual_rrsp, "annual_tfsa_contribution": annual_tfsa,
         "annual_nonreg_contribution": annual_nonreg,
-        "cpp_avg_income": cpp_avg_income,
-        "cpp_contributory_years": cpp_contributory_years,
-        "cpp_start_age": cpp_start,
-        "oas_start_age": oas_start,
-        "retire_age": retire_age,
-        "tfsa_priority": tfsa_priority,
-        "inv_return_rrsp":   inv_rrsp,
-        "inv_return_tfsa":   inv_tfsa,
-        "inv_return_nonreg": inv_nonreg,
-        "inv_return_dc":     inv_dc,
-        "pension_type":           pension_type_key,
-        "db_annual_benefit":      db_annual_benefit,
-        "db_indexed":             db_indexed,
-        "dc_pension_balance":     dc_pension_balance,
+        "cpp_avg_income": cpp_avg_income, "cpp_contributory_years": cpp_contributory_years,
+        "cpp_start_age": cpp_start, "oas_start_age": oas_start,
+        "retire_age": retire_age, "tfsa_priority": tfsa_priority,
+        "inv_return_rrsp": inv_rrsp, "inv_return_tfsa": inv_tfsa,
+        "inv_return_nonreg": inv_nonreg, "inv_return_dc": inv_dc,
+        "pension_type": pension_type_key,
+        "db_annual_benefit": db_annual_benefit, "db_indexed": db_indexed,
+        "dc_pension_balance": dc_pension_balance,
         "annual_dc_contribution": annual_dc_contribution,
     }
     for d, inf_val in dest_inflation_overrides.items():
         base_params[f"inflation_override_{d}"] = inf_val
 
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     # TAB 1 — LIVING EXPENSES
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     with page_tabs[1]:
         st.markdown("## 🏠 Monthly Expense Customization by Destination")
-        st.caption("All values in CAD. Defaults are based on real 2024 cost-of-living data. Adjust to match your lifestyle.")
+        st.caption("All values in CAD. Defaults are real 2024 cost-of-living data. Adjust to your lifestyle.")
 
         dest_expenses_local = {}
         n_cols = min(len(selected_dests), 3)
         exp_cols = st.columns(n_cols)
-
         for i, dest_name in enumerate(selected_dests):
-            col = exp_cols[i % n_cols]
             dest = DESTINATIONS[dest_name]
-            with col:
+            with exp_cols[i % n_cols]:
                 st.markdown(f"### {dest['flag']} {dest_name.split(',')[0]}")
                 monthly_total = 0
                 for category, default_val in dest["monthly_costs"].items():
                     val = st.number_input(
-                        f"{category}",
-                        min_value=0, max_value=20000,
+                        category, min_value=0, max_value=20000,
                         value=default_val, step=50,
-                        key=f"exp_{dest_name}_{category}",
+                        key=f"exp_{dest_name}_{category}"
                     )
                     monthly_total += val
-                years_to_retire = max(0, retire_age - current_age)
-                inf_at_retire = (1 + dest["inflation"]) ** years_to_retire
+                inf_override_key = f"inflation_override_{dest_name}"
+                used_inf = base_params.get(inf_override_key, dest["inflation"])
+                inf_at_retire = (1 + used_inf) ** max(0, retire_age - current_age)
                 st.metric("Monthly Total (today)", f"${monthly_total:,.0f}",
-                          f"~${monthly_total * inf_at_retire:,.0f} at retirement (inflation)")
+                          f"~${monthly_total * inf_at_retire:,.0f} at retirement ({used_inf*100:.1f}% inflation)")
                 st.caption(f"🏥 {dest['healthcare_note']}")
                 dest_expenses_local[dest_name] = monthly_total
 
-        # Store for use in other tabs via session state
         st.session_state["dest_expenses"] = dest_expenses_local
 
         st.divider()
         st.markdown("### 📊 Cost of Living Comparison")
         colors = px.colors.qualitative.Bold
-        cost_rows = [(d, dest_expenses_local[d]) for d in selected_dests]
-        cost_rows.sort(key=lambda x: x[1])
+        cost_rows = sorted([(d, dest_expenses_local[d]) for d in selected_dests], key=lambda x: x[1])
         fig_bar = go.Figure(go.Bar(
             x=[f"{DESTINATIONS[d]['flag']} {d.split(',')[0]}" for d, _ in cost_rows],
             y=[v for _, v in cost_rows],
             marker_color=colors[:len(cost_rows)],
-            text=[f"${v:,.0f}" for _, v in cost_rows],
-            textposition="outside"
+            text=[f"${v:,.0f}" for _, v in cost_rows], textposition="outside"
         ))
-        fig_bar.update_layout(template="plotly_dark", height=400,
-            yaxis_title="Monthly CAD", title="Monthly Cost of Living — Cheapest to Most Expensive")
+        fig_bar.update_layout(template="plotly_dark", height=400, yaxis_title="Monthly CAD",
+            title="Monthly Cost of Living — Low to High")
         st.plotly_chart(fig_bar, use_container_width=True)
 
-        # Pie charts row
         st.markdown("### 🥧 Expense Breakdown by Category")
         pie_cols = st.columns(min(len(selected_dests), 3))
         for i, dest_name in enumerate(selected_dests):
             dest = DESTINATIONS[dest_name]
-            expense_data = {
-                cat: st.session_state.get(f"exp_{dest_name}_{cat}", default_val)
-                for cat, default_val in dest["monthly_costs"].items()
-            }
+            expense_data = {cat: st.session_state.get(f"exp_{dest_name}_{cat}", dv)
+                            for cat, dv in dest["monthly_costs"].items()}
             with pie_cols[i % len(pie_cols)]:
                 fig_pie = go.Figure(go.Pie(
-                    labels=list(expense_data.keys()),
-                    values=list(expense_data.values()),
-                    hole=0.38,
-                    textinfo="percent",
-                ))
-                fig_pie.update_layout(
-                    template="plotly_dark", height=320,
+                    labels=list(expense_data.keys()), values=list(expense_data.values()),
+                    hole=0.38, textinfo="percent"))
+                fig_pie.update_layout(template="plotly_dark", height=320,
                     title=f"{dest['flag']} {dest_name.split(',')[0]}",
-                    showlegend=False,
-                    margin=dict(t=40, b=10, l=10, r=10)
-                )
+                    showlegend=False, margin=dict(t=40, b=10, l=10, r=10))
                 st.plotly_chart(fig_pie, use_container_width=True)
 
-    # Resolve dest_expenses (may come from session state if tab 1 not re-rendered)
-    dest_expenses = st.session_state.get("dest_expenses", {
-        d: sum(DESTINATIONS[d]["monthly_costs"].values()) for d in selected_dests
-    })
-    # Fill any missing destinations
+    # Resolve dest_expenses
+    dest_expenses = st.session_state.get("dest_expenses",
+        {d: sum(DESTINATIONS[d]["monthly_costs"].values()) for d in selected_dests})
     for d in selected_dests:
         if d not in dest_expenses:
             dest_expenses[d] = sum(DESTINATIONS[d]["monthly_costs"].values())
 
-    # ── Run projections ───────────────────────────────────────────────────────
+    # ── Run projections ──────────────────────────────────────────────────
     projections = {}
     for dest_name in selected_dests:
         params = base_params.copy()
@@ -1083,26 +1106,23 @@ def main():
 
     colors = px.colors.qualitative.Bold
 
-    # ════════════════════════════════════════════════════════════════════════
-    # TAB 2 — SUMMARY CARDS
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
+    # TAB 2 — SUMMARY
+    # ═══════════════════════════════════════════════════════════════
     with page_tabs[2]:
         st.markdown("## 📋 Retirement Plan Summary")
-
-        n = len(selected_dests)
-        summary_cols = st.columns(min(n, 3))
+        summary_cols = st.columns(min(len(selected_dests), 3))
         for i, dest_name in enumerate(selected_dests):
             dest       = DESTINATIONS[dest_name]
             df         = projections[dest_name]
             retired_df = df[df["Phase"] == "Retirement"]
-
-            score     = sustainability_score(df)
+            score      = sustainability_score(df)
             retire_val = retired_df.iloc[0]["Total Portfolio"] if not retired_df.empty else 0
             last_val   = df.iloc[-1]["Total Portfolio"]
             avg_tax    = (retired_df["Tax Paid (Canada)"].mean() + retired_df["Tax Paid (Local)"].mean()
                           ) if not retired_df.empty else 0
             monthly_exp = dest_expenses[dest_name]
-            earliest   = find_earliest_retirement(
+            earliest    = find_earliest_retirement(
                 {**base_params, "monthly_expenses_cad": monthly_exp}, dest_name, dest)
 
             with summary_cols[i % 3]:
@@ -1137,12 +1157,11 @@ def main():
                         </div>
                     </div>
                     <div style='margin-top:0.7rem;font-size:0.7rem;color:#8892b0;border-top:1px solid #2d4a6e;padding-top:0.5rem;'>
-                        💼 {dest["visa_difficulty"][:70]}
+                        💼 {dest["visa_difficulty"][:72]}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
 
-        # Side-by-side comparison table
         st.divider()
         st.markdown("### 🔢 Key Metrics Comparison Table")
         rows = []
@@ -1150,25 +1169,27 @@ def main():
             dest = DESTINATIONS[dest_name]
             df   = projections[dest_name]
             ret  = df[df["Phase"] == "Retirement"]
+            used_inf = base_params.get(f"inflation_override_{dest_name}", dest["inflation"])
             rows.append({
-                "Destination": f"{dest['flag']} {dest_name.split(',')[0]}",
-                "Monthly Cost (CAD)": f"${dest_expenses[dest_name]:,.0f}",
-                "Annual Cost (CAD)":  f"${dest_expenses[dest_name]*12:,.0f}",
+                "Destination":       f"{dest['flag']} {dest_name.split(',')[0]}",
+                "Monthly Cost":      f"${dest_expenses[dest_name]:,.0f}",
+                "Annual Cost":       f"${dest_expenses[dest_name]*12:,.0f}",
                 "Portfolio @ Retire": fmt_cad(ret.iloc[0]["Total Portfolio"]) if not ret.empty else "—",
-                "Portfolio @ End":    fmt_cad(df.iloc[-1]["Total Portfolio"]),
-                "Avg Annual Tax":     fmt_cad(ret["Tax Paid (Canada)"].mean() + ret["Tax Paid (Local)"].mean()) if not ret.empty else "—",
-                "Sustainability":     sustainability_score(df),
-                "Inflation Rate":     f"{dest['inflation']*100:.1f}%",
-                "Inv. Return":        f"{dest['investment_return']*100:.1f}%" if inv_override is None else f"{inv_override*100:.1f}%",
+                "Portfolio @ End":   fmt_cad(df.iloc[-1]["Total Portfolio"]),
+                "Avg Annual Tax":    fmt_cad(ret["Tax Paid (Canada)"].mean() + ret["Tax Paid (Local)"].mean()) if not ret.empty else "—",
+                "Sustainability":    sustainability_score(df),
+                "Inflation":         f"{used_inf*100:.1f}%",
+                "RRSP Return":       f"{inv_rrsp*100:.1f}%",
+                "TFSA Return":       f"{inv_tfsa*100:.1f}%",
+                "NonReg Return":     f"{inv_nonreg*100:.1f}%",
             })
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     # TAB 3 — PORTFOLIO GROWTH
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     with page_tabs[3]:
         st.markdown("## 📈 Portfolio Value Over Time")
-
         fig = go.Figure()
         for i, dest_name in enumerate(selected_dests):
             df   = projections[dest_name]
@@ -1185,8 +1206,7 @@ def main():
                       annotation_text=f"CPP {cpp_start}", annotation_font_color="#64ffda")
         fig.add_vline(x=oas_start, line_dash="dot", line_color="#bb86fc",
                       annotation_text=f"OAS {oas_start}", annotation_font_color="#bb86fc")
-        fig.add_hline(y=0, line_color="red", line_dash="dash", opacity=0.5,
-                      annotation_text="$0", annotation_font_color="red")
+        fig.add_hline(y=0, line_color="red", line_dash="dash", opacity=0.5)
         fig.update_layout(template="plotly_dark", hovermode="x unified",
             yaxis_title="Portfolio Value (CAD)", xaxis_title="Age",
             legend=dict(orientation="h", yanchor="bottom", y=1.02), height=520)
@@ -1194,8 +1214,8 @@ def main():
 
         st.divider()
         st.markdown("### 🏦 Account-by-Account Breakdown")
-        dest_acct = st.selectbox("Select destination for account breakdown", selected_dests, key="acct_dest")
-        df0  = projections[dest_acct]
+        dest_acct = st.selectbox("Select destination", selected_dests, key="acct_dest")
+        df0 = projections[dest_acct]
         fig2 = go.Figure()
         fig2.add_trace(go.Scatter(x=df0["Age"], y=df0["RRSP Balance"],
             name="RRSP/RRIF", fill="tozeroy", line=dict(color="#e94560"), stackgroup="one"))
@@ -1203,13 +1223,15 @@ def main():
             name="TFSA", fill="tonexty", line=dict(color="#64ffda"), stackgroup="one"))
         fig2.add_trace(go.Scatter(x=df0["Age"], y=df0["Non-Reg Balance"],
             name="Non-Reg", fill="tonexty", line=dict(color="#bb86fc"), stackgroup="one"))
+        if df0["DC Pension Balance"].sum() > 0:
+            fig2.add_trace(go.Scatter(x=df0["Age"], y=df0["DC Pension Balance"],
+                name="DC Pension", fill="tonexty", line=dict(color="#f4a261"), stackgroup="one"))
         fig2.add_vline(x=retire_age, line_dash="dash", line_color="orange")
         fig2.update_layout(template="plotly_dark", height=400,
             yaxis_title="Balance (CAD)", xaxis_title="Age",
             legend=dict(orientation="h", yanchor="bottom", y=1.02))
         st.plotly_chart(fig2, use_container_width=True)
 
-        # Balance at key ages table
         st.markdown("### 📐 Portfolio Balance at Key Ages")
         key_ages = sorted(set([retire_age, cpp_start, oas_start, 71, 80, 90, lifespan]))
         key_ages = [a for a in key_ages if current_age <= a <= lifespan]
@@ -1224,12 +1246,11 @@ def main():
             rows_age.append(row)
         st.dataframe(pd.DataFrame(rows_age), use_container_width=True, hide_index=True)
 
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     # TAB 4 — INCOME & WITHDRAWALS
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     with page_tabs[4]:
         st.markdown("## 💸 Retirement Income & Withdrawal Strategy")
-
         dest_inc = st.selectbox("Select destination", selected_dests, key="income_dest")
         df_inc   = projections[dest_inc][projections[dest_inc]["Phase"] == "Retirement"]
 
@@ -1244,16 +1265,16 @@ def main():
                 fig_inc.add_trace(go.Bar(x=df_inc["Age"], y=df_inc["DB Pension"],
                     name="DB Pension", marker_color="#f4a261"))
             fig_inc.add_trace(go.Bar(x=df_inc["Age"], y=df_inc["RRSP Withdrawal"],
-                name="RRSP/RRIF Withdrawal", marker_color="#e94560"))
+                name="RRSP/RRIF", marker_color="#e94560"))
             fig_inc.add_trace(go.Bar(x=df_inc["Age"], y=df_inc["TFSA Withdrawal"],
-                name="TFSA Withdrawal", marker_color="#ffd166"))
+                name="TFSA", marker_color="#ffd166"))
             if df_inc["DC Withdrawal"].sum() > 0:
                 fig_inc.add_trace(go.Bar(x=df_inc["Age"], y=df_inc["DC Withdrawal"],
-                    name="DC Pension Withdrawal", marker_color="#e76f51"))
+                    name="DC Pension", marker_color="#e76f51"))
             fig_inc.add_trace(go.Bar(x=df_inc["Age"], y=df_inc["NonReg Withdrawal"],
-                name="Non-Reg Withdrawal", marker_color="#06d6a0"))
+                name="Non-Reg", marker_color="#06d6a0"))
             fig_inc.add_trace(go.Scatter(x=df_inc["Age"], y=df_inc["Annual Expenses (CAD)"],
-                name="Total Expenses", line=dict(color="white", width=2.5, dash="dash")))
+                name="Expenses", line=dict(color="white", width=2.5, dash="dash")))
             fig_inc.update_layout(barmode="stack", template="plotly_dark", height=460,
                 yaxis_title="CAD / year", xaxis_title="Age",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02),
@@ -1262,10 +1283,8 @@ def main():
 
             st.markdown("### Annual Net Surplus / Deficit")
             sd_colors = ["#06d6a0" if v >= 0 else "#e94560" for v in df_inc["Net Surplus/Deficit"]]
-            fig_sd = go.Figure(go.Bar(
-                x=df_inc["Age"], y=df_inc["Net Surplus/Deficit"],
-                marker_color=sd_colors
-            ))
+            fig_sd = go.Figure(go.Bar(x=df_inc["Age"], y=df_inc["Net Surplus/Deficit"],
+                marker_color=sd_colors))
             fig_sd.add_hline(y=0, line_color="white", line_dash="dash")
             fig_sd.update_layout(template="plotly_dark", height=300,
                 yaxis_title="CAD", xaxis_title="Age")
@@ -1277,16 +1296,14 @@ def main():
                        df_inc["CPP Benefit"] + df_inc["OAS Benefit"] + df_inc["DB Pension"])
             total_w = total_w.replace(0, np.nan)
             fig_mix = go.Figure()
-            mix_sources = [
-                ("CPP Benefit",      "#64ffda", "CPP"),
-                ("OAS Benefit",      "#bb86fc", "OAS"),
-                ("DB Pension",       "#f4a261", "DB Pension"),
-                ("RRSP Withdrawal",  "#e94560", "RRSP/RRIF"),
-                ("TFSA Withdrawal",  "#ffd166", "TFSA"),
-                ("DC Withdrawal",    "#e76f51", "DC Pension"),
-                ("NonReg Withdrawal","#06d6a0", "Non-Reg"),
-            ]
-            for col_name, color_val, label in mix_sources:
+            for col_name, color_val, label in [
+                ("CPP Benefit","#64ffda","CPP"), ("OAS Benefit","#bb86fc","OAS"),
+                ("DB Pension","#f4a261","DB Pension"),
+                ("RRSP Withdrawal","#e94560","RRSP/RRIF"),
+                ("TFSA Withdrawal","#ffd166","TFSA"),
+                ("DC Withdrawal","#e76f51","DC Pension"),
+                ("NonReg Withdrawal","#06d6a0","Non-Reg"),
+            ]:
                 if df_inc[col_name].sum() > 0:
                     pct = (df_inc[col_name] / total_w * 100).fillna(0)
                     fig_mix.add_trace(go.Scatter(x=df_inc["Age"], y=pct,
@@ -1296,41 +1313,36 @@ def main():
                 legend=dict(orientation="h", yanchor="bottom", y=1.02))
             st.plotly_chart(fig_mix, use_container_width=True)
 
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     # TAB 5 — TAX ANALYSIS
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     with page_tabs[5]:
         st.markdown("## 🧾 Tax Analysis")
-
-        # Lifetime tax comparison
         tax_summary = []
         for dest_name in selected_dests:
             dest = DESTINATIONS[dest_name]
             df   = projections[dest_name][projections[dest_name]["Phase"] == "Retirement"]
             if df.empty:
                 continue
-            total_tax     = df["Tax Paid (Canada)"].sum() + df["Tax Paid (Local)"].sum()
-            total_income  = df["RRSP Withdrawal"].sum() + df["CPP Benefit"].sum() + df["OAS Benefit"].sum()
-            eff_rate      = total_tax / total_income if total_income > 0 else 0
+            total_tax    = df["Tax Paid (Canada)"].sum() + df["Tax Paid (Local)"].sum()
+            total_income = df["RRSP Withdrawal"].sum() + df["CPP Benefit"].sum() + df["OAS Benefit"].sum()
+            eff_rate     = total_tax / total_income if total_income > 0 else 0
             tax_summary.append({
-                "Destination": f"{dest['flag']} {dest_name.split(',')[0]}",
-                "Lifetime Tax": total_tax,
-                "Avg Annual Tax": df["Tax Paid (Canada)"].mean() + df["Tax Paid (Local)"].mean(),
-                "Avg Withholding/yr": df["Withholding Tax"].mean(),
-                "Effective Rate": f"{eff_rate:.1%}",
+                "Destination":       f"{dest['flag']} {dest_name.split(',')[0]}",
+                "Lifetime Tax":      total_tax,
+                "Avg Annual Tax":    df["Tax Paid (Canada)"].mean() + df["Tax Paid (Local)"].mean(),
+                "Avg Withholding/yr":df["Withholding Tax"].mean(),
+                "Effective Rate":    f"{eff_rate:.1%}",
             })
 
         if tax_summary:
             ts_df = pd.DataFrame(tax_summary)
-
             tc1, tc2 = st.columns(2)
             with tc1:
                 fig_lt = go.Figure(go.Bar(
                     x=ts_df["Destination"], y=ts_df["Lifetime Tax"],
                     marker_color=colors[:len(ts_df)],
-                    text=[fmt_cad(v) for v in ts_df["Lifetime Tax"]],
-                    textposition="outside"
-                ))
+                    text=[fmt_cad(v) for v in ts_df["Lifetime Tax"]], textposition="outside"))
                 fig_lt.update_layout(template="plotly_dark", height=380,
                     yaxis_title="CAD", title="Lifetime Tax Burden")
                 st.plotly_chart(fig_lt, use_container_width=True)
@@ -1338,14 +1350,10 @@ def main():
                 fig_avg = go.Figure(go.Bar(
                     x=ts_df["Destination"], y=ts_df["Avg Annual Tax"],
                     marker_color=colors[:len(ts_df)],
-                    text=[fmt_cad(v) for v in ts_df["Avg Annual Tax"]],
-                    textposition="outside"
-                ))
+                    text=[fmt_cad(v) for v in ts_df["Avg Annual Tax"]], textposition="outside"))
                 fig_avg.update_layout(template="plotly_dark", height=380,
                     yaxis_title="CAD/yr", title="Average Annual Tax")
                 st.plotly_chart(fig_avg, use_container_width=True)
-
-            # Comparison table
             st.dataframe(ts_df, use_container_width=True, hide_index=True)
 
         st.divider()
@@ -1359,7 +1367,6 @@ def main():
                 m1.metric("OAS NR Withholding",  f"{tax_info.get('oas_withholding',  0)*100:.0f}%")
                 m2.metric("CPP NR Withholding",  f"{tax_info.get('cpp_withholding',  0)*100:.0f}%")
                 m3.metric("RRSP NR Withholding", f"{tax_info.get('rrsp_withholding', 0)*100:.0f}%")
-
                 if tax_info.get("nhr_regime"):
                     st.success(f"✅ Portugal NHR 2.0: {tax_info['nhr_rate']*100:.0f}% flat on foreign pensions for {tax_info['nhr_years']} years")
                 if tax_info.get("pensioner_flat_tax"):
@@ -1368,7 +1375,6 @@ def main():
                     st.success("✅ Spain Beckham Law: 24% flat on Spanish-source income for first 6 years")
                 if tax_info.get("departure_tax"):
                     st.warning("⚠️ Departure tax applies when leaving Canada — deemed disposition of non-registered assets")
-
                 df_ret = projections[dest_name][projections[dest_name]["Phase"] == "Retirement"]
                 if not df_ret.empty:
                     fig_tx = go.Figure()
@@ -1384,16 +1390,14 @@ def main():
                         legend=dict(orientation="h", yanchor="bottom", y=1.02))
                     st.plotly_chart(fig_tx, use_container_width=True)
 
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     # TAB 6 — DATA TABLES
-    # ════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════
     with page_tabs[6]:
         st.markdown("## 📊 Detailed Year-by-Year Data")
-
         dest_tbl = st.selectbox("Select destination", selected_dests, key="table_dest")
         df_raw   = projections[dest_tbl]
 
-        # Milestones
         st.markdown("### 🏁 Key Financial Milestones")
         milestones = []
         ret_rows = df_raw[df_raw["Phase"] == "Retirement"]
@@ -1408,7 +1412,11 @@ def main():
         if not oas_r.empty:
             milestones.append({"Event": "👴 OAS begins", "Age": int(oas_r.iloc[0]["Age"]),
                 "Portfolio": fmt_cad(oas_r.iloc[0]["Total Portfolio"])})
-        peak  = df_raw.loc[df_raw["Total Portfolio"].idxmax()]
+        db_r = df_raw[df_raw["DB Pension"] > 0]
+        if not db_r.empty:
+            milestones.append({"Event": "🏢 DB Pension begins", "Age": int(db_r.iloc[0]["Age"]),
+                "Portfolio": fmt_cad(db_r.iloc[0]["Total Portfolio"])})
+        peak = df_raw.loc[df_raw["Total Portfolio"].idxmax()]
         milestones.append({"Event": "📈 Peak portfolio", "Age": int(peak["Age"]),
             "Portfolio": fmt_cad(peak["Total Portfolio"])})
         depl = df_raw[df_raw["Total Portfolio"] <= 0]
@@ -1416,14 +1424,12 @@ def main():
             milestones.append({"Event": "⚠️ Portfolio depleted", "Age": int(depl.iloc[0]["Age"]),
                 "Portfolio": "$0"})
         else:
-            final = df_raw.iloc[-1]
             milestones.append({"Event": f"✅ Final balance (age {lifespan})", "Age": lifespan,
-                "Portfolio": fmt_cad(final["Total Portfolio"])})
+                "Portfolio": fmt_cad(df_raw.iloc[-1]["Total Portfolio"])})
         st.dataframe(pd.DataFrame(milestones), use_container_width=True, hide_index=True)
 
         st.divider()
         st.markdown("### 📋 Full Annual Projection")
-
         money_cols = [
             "RRSP Balance", "TFSA Balance", "Non-Reg Balance", "DC Pension Balance", "Total Portfolio",
             "Gross Income", "CPP Benefit", "OAS Benefit", "DB Pension",
@@ -1434,10 +1440,8 @@ def main():
         disp = df_raw[["Age", "Year", "Phase"] + money_cols].copy()
         for c in money_cols:
             disp[c] = disp[c].apply(lambda x: f"${x:,.0f}")
-
         st.dataframe(disp, use_container_width=True, hide_index=True, height=520)
 
-    # ── Footer ────────────────────────────────────────────────────────────────
     st.divider()
     st.markdown("""
     <div style='background:#1e2a3a;padding:1rem;border-radius:8px;font-size:0.8rem;color:#8892b0;'>
