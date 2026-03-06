@@ -511,89 +511,114 @@ def run_projection(params: dict, dest_name: str, dest_data: dict) -> pd.DataFram
     """
     Run year-by-year retirement projection.
     Returns DataFrame with annual financial details.
+    Supports per-account investment returns, per-destination inflation override,
+    and a company group pension plan (DB or DC).
     """
     current_age = params["current_age"]
-    retire_age = params["retire_age"]
-    lifespan = params["lifespan"]
+    retire_age  = params["retire_age"]
+    lifespan    = params["lifespan"]
     current_year = 2024
 
-    # Accounts
-    rrsp = params["rrsp_balance"]
-    tfsa = params["tfsa_balance"]
+    # ── Accounts ──────────────────────────────────────────────────────────
+    rrsp   = params["rrsp_balance"]
+    tfsa   = params["tfsa_balance"]
     nonreg = params["nonreg_balance"]
+    # DC pension account balance (grows like RRSP but separate)
+    dc_pension = params.get("dc_pension_balance", 0.0)
 
-    # Income during accumulation
-    salary = params["current_salary"]
+    # ── Income during accumulation ─────────────────────────────────────────
+    salary                   = params["current_salary"]
     annual_rrsp_contribution = params["annual_rrsp_contribution"]
     annual_tfsa_contribution = params["annual_tfsa_contribution"]
     annual_nonreg_contribution = params["annual_nonreg_contribution"]
-    salary_growth = params["salary_growth"]
+    salary_growth            = params["salary_growth"]
+    # DC: employer + employee contribution per year
+    annual_dc_contribution   = params.get("annual_dc_contribution", 0.0)
 
-    # Rates
-    inv_return = dest_data["investment_return"]
-    inv_return_override = params.get("investment_return_override", None)
-    if inv_return_override is not None:
-        inv_return = inv_return_override
+    # ── Per-account investment returns ────────────────────────────────────
+    # Fall back to dest default if not overridden
+    dest_default_return = dest_data["investment_return"]
+    inv_rrsp   = params.get("inv_return_rrsp",   dest_default_return)
+    inv_tfsa   = params.get("inv_return_tfsa",   dest_default_return)
+    inv_nonreg = params.get("inv_return_nonreg", dest_default_return)
+    inv_dc     = params.get("inv_return_dc",     dest_default_return)
 
+    # ── Inflation (destination-specific override wins) ────────────────────
     inflation = dest_data["inflation"]
-    inflation_override = params.get("inflation_override", None)
-    if inflation_override is not None:
-        inflation = inflation_override
+    dest_inf_override = params.get(f"inflation_override_{dest_name}", None)
+    if dest_inf_override is not None:
+        inflation = dest_inf_override
+    elif params.get("inflation_override") is not None:
+        inflation = params["inflation_override"]
 
-    # Monthly expenses (in CAD at today's value)
-    monthly_expenses_cad = params["monthly_expenses_cad"]
+    # ── Monthly expenses ──────────────────────────────────────────────────
+    monthly_expenses_cad  = params["monthly_expenses_cad"]
     annual_expenses_today = monthly_expenses_cad * 12
 
-    # Government benefits
-    oas_start = params["oas_start_age"]
-    cpp_start = params["cpp_start_age"]
-    years_canada = params["years_in_canada"]
-    avg_cpp_income = params["cpp_avg_income"]
+    # ── Government benefits ───────────────────────────────────────────────
+    oas_start             = params["oas_start_age"]
+    cpp_start             = params["cpp_start_age"]
+    years_canada          = params["years_in_canada"]
+    avg_cpp_income        = params["cpp_avg_income"]
     cpp_contributory_years = params["cpp_contributory_years"]
 
-    # Tax info
-    tax_info = dest_data["tax_info"]
-    is_domestic = tax_info["type"] == "domestic"
-    province = tax_info.get("provincial", "Ontario")
+    # ── Group Pension Plan ────────────────────────────────────────────────
+    pension_type         = params.get("pension_type", "none")       # "none" | "db" | "dc"
+    # DB: fixed annual benefit starting at retire_age (in today's CAD, indexed to CPI)
+    db_annual_benefit    = params.get("db_annual_benefit", 0.0)
+    db_indexed           = params.get("db_indexed", True)           # CPI-indexed
+    db_survivor_pct      = params.get("db_survivor_pct", 0.60)      # survivor benefit %
+    # DC: treated as additional registered account (like RRSP for tax, separate balance)
 
-    # Withholding rates for NR
-    oas_wh = tax_info.get("oas_withholding", 0.25)
-    cpp_wh = tax_info.get("cpp_withholding", 0.25)
-    rrsp_wh = tax_info.get("rrsp_withholding", 0.25)
-
-    # NHR / special regimes
-    nhr = tax_info.get("nhr_regime", False)
-    nhr_rate = tax_info.get("nhr_rate", 0.10)
-    nhr_years = tax_info.get("nhr_years", 10)
-    pensioner_flat = tax_info.get("pensioner_flat_tax", False)
-    pensioner_flat_rate = tax_info.get("pensioner_flat_rate", 0.07)
+    # ── Tax info ──────────────────────────────────────────────────────────
+    tax_info         = dest_data["tax_info"]
+    is_domestic      = tax_info["type"] == "domestic"
+    province         = tax_info.get("provincial", "Ontario")
+    oas_wh           = tax_info.get("oas_withholding",  0.25)
+    cpp_wh           = tax_info.get("cpp_withholding",  0.25)
+    rrsp_wh          = tax_info.get("rrsp_withholding", 0.25)
+    nhr              = tax_info.get("nhr_regime",        False)
+    nhr_rate         = tax_info.get("nhr_rate",          0.10)
+    nhr_years        = tax_info.get("nhr_years",         10)
+    pensioner_flat   = tax_info.get("pensioner_flat_tax", False)
+    pensioner_flat_rate  = tax_info.get("pensioner_flat_rate",  0.07)
     pensioner_flat_years = tax_info.get("pensioner_flat_years", 15)
     local_tax_on_foreign = tax_info.get("local_tax_on_foreign_income", False)
-    local_tax_rate = tax_info.get("local_tax_rate", 0.0)
+    local_tax_rate       = tax_info.get("local_tax_rate", 0.0)
 
     records = []
 
     for age in range(current_age, lifespan + 1):
-        year = current_year + (age - current_age)
+        year          = current_year + (age - current_age)
         years_retired = max(0, age - retire_age)
-        is_retired = age >= retire_age
+        is_retired    = age >= retire_age
         inflation_factor = (1 + inflation) ** years_retired if is_retired else 1.0
 
         # ── Accumulation Phase ────────────────────────────────────────────
         if not is_retired:
             sal_now = salary * (1 + salary_growth) ** (age - current_age)
-            rrsp = rrsp * (1 + inv_return) + annual_rrsp_contribution
-            tfsa = tfsa * (1 + inv_return) + annual_tfsa_contribution
-            nonreg = nonreg * (1 + inv_return) + annual_nonreg_contribution
-            tax_paid = canadian_total_tax(sal_now, province, year)
-            net_salary = sal_now - tax_paid - annual_rrsp_contribution - annual_tfsa_contribution - annual_nonreg_contribution
+            rrsp    = rrsp    * (1 + inv_rrsp)   + annual_rrsp_contribution
+            tfsa    = tfsa    * (1 + inv_tfsa)   + annual_tfsa_contribution
+            nonreg  = nonreg  * (1 + inv_nonreg) + annual_nonreg_contribution
+            if pension_type == "dc":
+                dc_pension = dc_pension * (1 + inv_dc) + annual_dc_contribution
+            tax_paid   = canadian_total_tax(sal_now, province, year)
+            net_salary = (sal_now - tax_paid
+                          - annual_rrsp_contribution
+                          - annual_tfsa_contribution
+                          - annual_nonreg_contribution
+                          - (annual_dc_contribution if pension_type == "dc" else 0))
 
+            total_port = rrsp + tfsa + nonreg + (dc_pension if pension_type == "dc" else 0)
             records.append({
                 "Age": age, "Year": year, "Phase": "Accumulation",
-                "RRSP Balance": rrsp, "TFSA Balance": tfsa, "Non-Reg Balance": nonreg,
-                "Total Portfolio": rrsp + tfsa + nonreg,
-                "Gross Income": sal_now, "CPP Benefit": 0, "OAS Benefit": 0,
-                "RRSP Withdrawal": 0, "TFSA Withdrawal": 0, "NonReg Withdrawal": 0,
+                "RRSP Balance": rrsp, "TFSA Balance": tfsa,
+                "Non-Reg Balance": nonreg, "DC Pension Balance": dc_pension,
+                "Total Portfolio": total_port,
+                "Gross Income": sal_now,
+                "CPP Benefit": 0, "OAS Benefit": 0, "DB Pension": 0,
+                "RRSP Withdrawal": 0, "TFSA Withdrawal": 0,
+                "NonReg Withdrawal": 0, "DC Withdrawal": 0,
                 "Annual Expenses (CAD)": 0,
                 "Tax Paid (Canada)": tax_paid, "Tax Paid (Local)": 0,
                 "Withholding Tax": 0, "Net Surplus/Deficit": net_salary,
@@ -604,117 +629,136 @@ def run_projection(params: dict, dest_name: str, dest_data: dict) -> pd.DataFram
         # ── Retirement Phase ──────────────────────────────────────────────
         annual_expenses = annual_expenses_today * inflation_factor
 
-        # Government benefits (gross, in CAD)
-        cpp_gross = get_cpp_annual(cpp_start, avg_cpp_income, cpp_contributory_years) * \
-                    (1 + 0.02) ** (year - 2024) if age >= cpp_start else 0.0
-        oas_gross = get_oas_annual(oas_start, age, years_canada) * \
-                    (1 + 0.02) ** (year - 2024) if age >= oas_start else 0.0
+        # Government benefits (gross, CPI-indexed at 2%/yr)
+        cpi_idx   = (1 + 0.02) ** (year - 2024)
+        cpp_gross = (get_cpp_annual(cpp_start, avg_cpp_income, cpp_contributory_years)
+                     * cpi_idx) if age >= cpp_start else 0.0
+        oas_gross = (get_oas_annual(oas_start, age, years_canada)
+                     * cpi_idx) if age >= oas_start else 0.0
 
-        # Convert expenses to CAD if foreign (already in CAD from user input)
+        # DB Pension income
+        db_income = 0.0
+        if pension_type == "db" and age >= retire_age:
+            db_income = db_annual_benefit * (cpi_idx if db_indexed else 1.0)
+
         expenses_cad = annual_expenses
 
-        # Calculate withholding on government benefits
+        # Withholding on government benefits (NR)
         if is_domestic:
-            cpp_net = cpp_gross
-            oas_net = oas_gross
-            wh_paid = 0.0
+            cpp_net  = cpp_gross
+            oas_net  = oas_gross
+            wh_paid  = 0.0
         else:
-            cpp_net = cpp_gross * (1 - cpp_wh)
-            oas_net = oas_gross * (1 - oas_wh)
-            wh_paid = (cpp_gross * cpp_wh) + (oas_gross * oas_wh)
+            cpp_net  = cpp_gross * (1 - cpp_wh)
+            oas_net  = oas_gross * (1 - oas_wh)
+            wh_paid  = (cpp_gross * cpp_wh) + (oas_gross * oas_wh)
+            # DB pension treated same as CPP for withholding purposes (registered pension)
+            db_net   = db_income * (1 - rrsp_wh)
+            wh_paid += db_income * rrsp_wh
+        if is_domestic:
+            db_net = db_income
 
-        govt_income = cpp_net + oas_net
-        income_gap = max(0, expenses_cad - govt_income)
+        guaranteed_income = cpp_net + oas_net + db_net
+        income_gap        = max(0, expenses_cad - guaranteed_income)
 
-        # Withdrawal strategy:
-        # 1. TFSA first (tax-free, no withholding) up to a limit
-        # 2. RRSP/RRIF (tax implications)
-        # 3. Non-registered last (only on gains, no withholding if NR)
-
-        rrsp_withdrawal = 0.0
-        tfsa_withdrawal = 0.0
+        # ── Withdrawal Strategy ────────────────────────────────────────────
+        # Order: TFSA (tax-free) → DC Pension → RRSP/RRIF → Non-Reg
+        rrsp_withdrawal   = 0.0
+        tfsa_withdrawal   = 0.0
         nonreg_withdrawal = 0.0
-        rrsp_tax_wh = 0.0
+        dc_withdrawal     = 0.0
+        rrsp_tax_wh       = 0.0
+        dc_tax_wh         = 0.0
 
-        # RRIF conversion at 71 → minimum withdrawal
+        # RRIF minimum
         rrif_min = rrsp * rrsp_rrif_min_withdrawal_rate(age)
+        # DC pension min (treated same as RRIF once converted)
+        dc_rrif_min = dc_pension * rrsp_rrif_min_withdrawal_rate(age)
 
         remaining_gap = income_gap
 
-        # TFSA: no tax ever
-        tfsa_draw = min(tfsa, remaining_gap * params.get("tfsa_priority", 0.5))
-        tfsa_draw = max(tfsa_draw, 0)
-        tfsa_withdrawal = tfsa_draw
-        remaining_gap -= tfsa_draw
+        # 1. TFSA
+        tfsa_draw       = min(tfsa, remaining_gap * params.get("tfsa_priority", 0.5))
+        tfsa_withdrawal = max(tfsa_draw, 0)
+        remaining_gap  -= tfsa_withdrawal
 
-        # RRSP/RRIF
-        rrsp_draw = max(rrif_min, min(rrsp, remaining_gap / (1 - rrsp_wh if not is_domestic else 0.3)))
-        rrsp_draw = min(rrsp, rrsp_draw)
+        # 2. DC Pension (if DC type)
+        if pension_type == "dc":
+            dc_draw = max(dc_rrif_min, min(dc_pension,
+                          remaining_gap / (1 - rrsp_wh if not is_domestic else 0.3)))
+            dc_draw      = min(dc_pension, dc_draw)
+            dc_withdrawal = dc_draw
+            if not is_domestic:
+                dc_tax_wh   = dc_draw * rrsp_wh
+                wh_paid    += dc_tax_wh
+            remaining_gap -= (dc_draw - dc_tax_wh)
+
+        # 3. RRSP/RRIF
+        rrsp_draw = max(rrif_min, min(rrsp,
+                        remaining_gap / (1 - rrsp_wh if not is_domestic else 0.3)))
+        rrsp_draw       = min(rrsp, rrsp_draw)
         rrsp_withdrawal = rrsp_draw
-        if is_domestic:
-            # Tax calculated as part of total income
-            rrsp_tax_wh = 0.0
-        else:
-            rrsp_tax_wh = rrsp_draw * rrsp_wh
+        if not is_domestic:
+            rrsp_tax_wh  = rrsp_draw * rrsp_wh
+            wh_paid     += rrsp_tax_wh
         remaining_gap -= (rrsp_draw - rrsp_tax_wh)
 
-        # Non-reg (only gains taxable; assume 50% ACB for simplicity)
-        nonreg_draw = max(0, min(nonreg, remaining_gap))
+        # 4. Non-Reg
+        nonreg_draw       = max(0, min(nonreg, remaining_gap))
         nonreg_withdrawal = nonreg_draw
-        remaining_gap -= nonreg_draw
+        remaining_gap    -= nonreg_draw
 
         # Grow accounts
-        rrsp = max(0, rrsp - rrsp_withdrawal) * (1 + inv_return)
-        tfsa = max(0, tfsa - tfsa_withdrawal) * (1 + inv_return)
-        nonreg = max(0, nonreg - nonreg_withdrawal) * (1 + inv_return)
+        rrsp      = max(0, rrsp      - rrsp_withdrawal)   * (1 + inv_rrsp)
+        tfsa      = max(0, tfsa      - tfsa_withdrawal)   * (1 + inv_tfsa)
+        nonreg    = max(0, nonreg    - nonreg_withdrawal) * (1 + inv_nonreg)
+        dc_pension = max(0, dc_pension - dc_withdrawal)   * (1 + inv_dc)
 
-        total_withdrawal = rrsp_withdrawal + tfsa_withdrawal + nonreg_withdrawal
-        total_gross_income = cpp_gross + oas_gross + total_withdrawal
+        total_withdrawal  = rrsp_withdrawal + tfsa_withdrawal + nonreg_withdrawal + dc_withdrawal
+        total_gross_income = cpp_gross + oas_gross + db_income + total_withdrawal
 
-        # ── TAX CALCULATION ────────────────────────────────────────────────
+        # ── Tax Calculation ────────────────────────────────────────────────
         if is_domestic:
-            # Full Canadian tax on all income
-            taxable_income = cpp_gross + oas_gross + rrsp_withdrawal + (nonreg_withdrawal * 0.5)
+            taxable_income   = (cpp_gross + oas_gross + db_income
+                                + rrsp_withdrawal + dc_withdrawal
+                                + (nonreg_withdrawal * 0.5))
             oas_clawback_amt = oas_clawback(taxable_income, year)
-            canada_tax = canadian_total_tax(taxable_income, province, year)
-            local_tax = 0.0
-            wh_paid = oas_clawback_amt
-            total_tax = canada_tax
+            canada_tax       = canadian_total_tax(taxable_income, province, year)
+            local_tax        = 0.0
+            wh_paid          = oas_clawback_amt
+            total_tax        = canada_tax
         else:
-            # Already withheld at source (wh_paid includes OAS+CPP withholding)
-            # RRSP withholding
-            wh_paid += rrsp_tax_wh
             oas_clawback_amt = 0.0
-
-            # Local country tax
+            foreign_registered_net = (cpp_net + oas_net + db_net
+                                      + rrsp_withdrawal * (1 - rrsp_wh)
+                                      + dc_withdrawal   * (1 - rrsp_wh))
             if nhr and years_retired <= nhr_years:
-                # Portugal NHR: flat rate on foreign pension
-                local_tax = (cpp_net + oas_net + rrsp_withdrawal * (1 - rrsp_wh)) * nhr_rate
+                local_tax = foreign_registered_net * nhr_rate
             elif pensioner_flat and years_retired <= pensioner_flat_years:
-                # Greece 7% flat
-                local_tax = (cpp_net + oas_net + rrsp_withdrawal * (1 - rrsp_wh)) * pensioner_flat_rate
+                local_tax = foreign_registered_net * pensioner_flat_rate
             elif local_tax_on_foreign:
-                foreign_income = cpp_net + oas_net + rrsp_withdrawal * (1 - rrsp_wh)
-                local_tax = foreign_income * local_tax_rate
+                local_tax = foreign_registered_net * local_tax_rate
             else:
                 local_tax = 0.0
-
             canada_tax = 0.0
-            total_tax = wh_paid + local_tax
+            total_tax  = wh_paid + local_tax
 
-        # Net position
-        net_income = total_gross_income - total_tax
+        net_income  = total_gross_income - total_tax
         net_surplus = net_income - expenses_cad
+
+        total_port  = rrsp + tfsa + nonreg + (dc_pension if pension_type == "dc" else 0)
 
         records.append({
             "Age": age, "Year": year, "Phase": "Retirement",
-            "RRSP Balance": rrsp, "TFSA Balance": tfsa, "Non-Reg Balance": nonreg,
-            "Total Portfolio": rrsp + tfsa + nonreg,
+            "RRSP Balance": rrsp, "TFSA Balance": tfsa,
+            "Non-Reg Balance": nonreg, "DC Pension Balance": dc_pension,
+            "Total Portfolio": total_port,
             "Gross Income": total_gross_income,
-            "CPP Benefit": cpp_gross, "OAS Benefit": oas_gross,
+            "CPP Benefit": cpp_gross, "OAS Benefit": oas_gross, "DB Pension": db_income,
             "RRSP Withdrawal": rrsp_withdrawal,
             "TFSA Withdrawal": tfsa_withdrawal,
             "NonReg Withdrawal": nonreg_withdrawal,
+            "DC Withdrawal": dc_withdrawal,
             "Annual Expenses (CAD)": expenses_cad,
             "Tax Paid (Canada)": canada_tax + wh_paid,
             "Tax Paid (Local)": local_tax,
@@ -895,8 +939,18 @@ def main():
     annual_rrsp    = st.session_state.get("rrsp_con",    18000)
     annual_tfsa    = st.session_state.get("tfsa_con",     7000)
     annual_nonreg  = st.session_state.get("nr_con",      10000)
-    inv_override   = st.session_state.get("inv_ov", None) if st.session_state.get("use_inv", False) else None
-    inf_override   = st.session_state.get("inf_ov", None) if st.session_state.get("use_inf", False) else None
+    inv_rrsp       = st.session_state.get("inv_rrsp",   0.065)
+    inv_tfsa       = st.session_state.get("inv_tfsa",   0.07)
+    inv_nonreg     = st.session_state.get("inv_nonreg", 0.055)
+    inv_dc         = st.session_state.get("inv_dc",     0.065)
+    _pension_radio     = st.session_state.get("pension_type_radio", "None")
+    pension_type_key   = {"None": "none", "Defined Benefit (DB)": "db",
+                          "Defined Contribution (DC)": "dc"}.get(_pension_radio, "none")
+    db_annual_benefit  = st.session_state.get("db_benefit",  0.0)
+    db_indexed         = st.session_state.get("db_indexed",  True)
+    dc_pension_balance = st.session_state.get("dc_bal",      0.0)
+    annual_dc_contribution = st.session_state.get("dc_con",  0.0)
+    dest_inflation_overrides = st.session_state.get("dest_inflation_overrides", {})
     selected_dests = st.session_state.get("sel_dests",
                         ["Toronto, Canada", "Lisbon/Algarve, Portugal", "Athens/Crete, Greece"])
 
@@ -923,9 +977,18 @@ def main():
         "oas_start_age": oas_start,
         "retire_age": retire_age,
         "tfsa_priority": tfsa_priority,
-        "investment_return_override": inv_override,
-        "inflation_override": inf_override,
+        "inv_return_rrsp":   inv_rrsp,
+        "inv_return_tfsa":   inv_tfsa,
+        "inv_return_nonreg": inv_nonreg,
+        "inv_return_dc":     inv_dc,
+        "pension_type":           pension_type_key,
+        "db_annual_benefit":      db_annual_benefit,
+        "db_indexed":             db_indexed,
+        "dc_pension_balance":     dc_pension_balance,
+        "annual_dc_contribution": annual_dc_contribution,
     }
+    for d, inf_val in dest_inflation_overrides.items():
+        base_params[f"inflation_override_{d}"] = inf_val
 
     # ════════════════════════════════════════════════════════════════════════
     # TAB 1 — LIVING EXPENSES
@@ -1177,10 +1240,16 @@ def main():
                 name="CPP", marker_color="#64ffda"))
             fig_inc.add_trace(go.Bar(x=df_inc["Age"], y=df_inc["OAS Benefit"],
                 name="OAS", marker_color="#bb86fc"))
+            if df_inc["DB Pension"].sum() > 0:
+                fig_inc.add_trace(go.Bar(x=df_inc["Age"], y=df_inc["DB Pension"],
+                    name="DB Pension", marker_color="#f4a261"))
             fig_inc.add_trace(go.Bar(x=df_inc["Age"], y=df_inc["RRSP Withdrawal"],
                 name="RRSP/RRIF Withdrawal", marker_color="#e94560"))
             fig_inc.add_trace(go.Bar(x=df_inc["Age"], y=df_inc["TFSA Withdrawal"],
                 name="TFSA Withdrawal", marker_color="#ffd166"))
+            if df_inc["DC Withdrawal"].sum() > 0:
+                fig_inc.add_trace(go.Bar(x=df_inc["Age"], y=df_inc["DC Withdrawal"],
+                    name="DC Pension Withdrawal", marker_color="#e76f51"))
             fig_inc.add_trace(go.Bar(x=df_inc["Age"], y=df_inc["NonReg Withdrawal"],
                 name="Non-Reg Withdrawal", marker_color="#06d6a0"))
             fig_inc.add_trace(go.Scatter(x=df_inc["Age"], y=df_inc["Annual Expenses (CAD)"],
@@ -1202,21 +1271,26 @@ def main():
                 yaxis_title="CAD", xaxis_title="Age")
             st.plotly_chart(fig_sd, use_container_width=True)
 
-            # Withdrawal mix over time
-            st.markdown("### Withdrawal Source Mix (%)")
+            st.markdown("### Income Source Mix (%)")
             total_w = (df_inc["RRSP Withdrawal"] + df_inc["TFSA Withdrawal"] +
-                       df_inc["NonReg Withdrawal"] + df_inc["CPP Benefit"] + df_inc["OAS Benefit"])
+                       df_inc["NonReg Withdrawal"] + df_inc["DC Withdrawal"] +
+                       df_inc["CPP Benefit"] + df_inc["OAS Benefit"] + df_inc["DB Pension"])
             total_w = total_w.replace(0, np.nan)
             fig_mix = go.Figure()
-            for col_name, color_val, label in [
-                ("CPP Benefit","#64ffda","CPP"), ("OAS Benefit","#bb86fc","OAS"),
-                ("RRSP Withdrawal","#e94560","RRSP/RRIF"),
-                ("TFSA Withdrawal","#ffd166","TFSA"),
-                ("NonReg Withdrawal","#06d6a0","Non-Reg"),
-            ]:
-                pct = (df_inc[col_name] / total_w * 100).fillna(0)
-                fig_mix.add_trace(go.Scatter(x=df_inc["Age"], y=pct,
-                    name=label, stackgroup="one", line=dict(color=color_val)))
+            mix_sources = [
+                ("CPP Benefit",      "#64ffda", "CPP"),
+                ("OAS Benefit",      "#bb86fc", "OAS"),
+                ("DB Pension",       "#f4a261", "DB Pension"),
+                ("RRSP Withdrawal",  "#e94560", "RRSP/RRIF"),
+                ("TFSA Withdrawal",  "#ffd166", "TFSA"),
+                ("DC Withdrawal",    "#e76f51", "DC Pension"),
+                ("NonReg Withdrawal","#06d6a0", "Non-Reg"),
+            ]
+            for col_name, color_val, label in mix_sources:
+                if df_inc[col_name].sum() > 0:
+                    pct = (df_inc[col_name] / total_w * 100).fillna(0)
+                    fig_mix.add_trace(go.Scatter(x=df_inc["Age"], y=pct,
+                        name=label, stackgroup="one", line=dict(color=color_val)))
             fig_mix.update_layout(template="plotly_dark", height=320,
                 yaxis_title="% of total income", xaxis_title="Age",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02))
@@ -1351,9 +1425,9 @@ def main():
         st.markdown("### 📋 Full Annual Projection")
 
         money_cols = [
-            "RRSP Balance", "TFSA Balance", "Non-Reg Balance", "Total Portfolio",
-            "Gross Income", "CPP Benefit", "OAS Benefit",
-            "RRSP Withdrawal", "TFSA Withdrawal", "NonReg Withdrawal",
+            "RRSP Balance", "TFSA Balance", "Non-Reg Balance", "DC Pension Balance", "Total Portfolio",
+            "Gross Income", "CPP Benefit", "OAS Benefit", "DB Pension",
+            "RRSP Withdrawal", "TFSA Withdrawal", "DC Withdrawal", "NonReg Withdrawal",
             "Annual Expenses (CAD)", "Tax Paid (Canada)", "Tax Paid (Local)",
             "Withholding Tax", "Net Surplus/Deficit", "OAS Clawback",
         ]
